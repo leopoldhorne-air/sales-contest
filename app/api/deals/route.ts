@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getDeals, getFirstCanvas, getTotalARR, addDeal, deleteDeal, markFirstCanvas, findDealBySfId } from "@/lib/store";
 import type { Deal } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const [deals, firstCanvas, arrSnapshot] = await Promise.all([getDeals(), getFirstCanvas(), getTotalARR()]);
   return NextResponse.json({ deals, firstCanvas, totalARR: arrSnapshot.value, totalARRUpdatedAt: arrSnapshot.updatedAt });
