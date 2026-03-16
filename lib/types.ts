@@ -29,6 +29,7 @@ export interface Deal {
   account: string;
   notes: string;
   gong: string;
+  sfLink?: string;
   isLegacy: boolean;
   date: string;
   sfId?: string; // Salesforce opportunity ID for deduplication

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Deal, FirstCanvas, Team, Score } from "@/lib/types";
 import {
   SALES_REPS, AAE_REPS, CS_REPS,
@@ -22,6 +22,11 @@ function teamColor(team: Team) {
   if (team === "AAE") return { primary: AIR.gold, dim: AIR.goldDim, border: AIR.goldBorder, label: "🟡 AAE" };
   return { primary: AIR.teal, dim: AIR.tealDim, border: AIR.tealBorder, label: "🟢 CS" };
 }
+
+// Capture group 1 extracts the record ID
+const SF_OPP_REGEX = /^https:\/\/airinc\.lightning\.force\.com\/lightning\/r\/Opportunity\/([A-Za-z0-9]+)\/view$/;
+const SF_ACCOUNT_REGEX = /^https:\/\/airinc\.lightning\.force\.com\/lightning\/r\/Account\/([A-Za-z0-9]+)\/view$/;
+const SF_LINK_REGEX = SF_OPP_REGEX; // kept for any remaining references
 
 const labelStyle: React.CSSProperties = {
   display: "block", marginBottom: 6, fontSize: 11,
@@ -49,19 +54,38 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
   const [submitAccount, setSubmitAccount] = useState("");
   const [submitNotes, setSubmitNotes] = useState("");
   const [submitGong, setSubmitGong] = useState("");
+  const [submitSfLink, setSubmitSfLink] = useState("");
+  const [sfLinkError, setSfLinkError] = useState("");
   const [submitLegacy, setSubmitLegacy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [activeBoard, setActiveBoard] = useState<Team>("Sales");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshCooldown, setRefreshCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, []);
 
   const refresh = async () => {
+    if (syncing || refreshCooldown > 0) return;
     setSyncing(true);
     try {
       const res = await fetch("/api/deals");
       const data = await res.json();
       setDeals(data.deals);
       setFirstCanvas(data.firstCanvas);
+      // Start 5-minute cooldown
+      setRefreshCooldown(300);
+      cooldownRef.current = setInterval(() => {
+        setRefreshCooldown((prev) => {
+          if (prev <= 1) { clearInterval(cooldownRef.current!); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
     } finally {
       setSyncing(false);
     }
@@ -88,6 +112,21 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
   const handleSubmit = async () => {
     if (!submitRep) return;
     if (!submitLegacy && submitActions.length === 0) return;
+    const activeRegex = submitTeam === "AAE" ? SF_ACCOUNT_REGEX : SF_OPP_REGEX;
+    const linkLabel = submitTeam === "AAE" ? "SFDC account link" : "Salesforce opportunity link";
+
+    if (!submitSfLink) {
+      setSfLinkError(`${linkLabel.charAt(0).toUpperCase() + linkLabel.slice(1)} is required.`);
+      return;
+    }
+    if (!activeRegex.test(submitSfLink)) {
+      const expected = submitTeam === "AAE"
+        ? "airinc.lightning.force.com/lightning/r/Account/…/view"
+        : "airinc.lightning.force.com/lightning/r/Opportunity/…/view";
+      setSfLinkError(`Must match: ${expected}`);
+      return;
+    }
+    setSfLinkError("");
 
     let pts = 0;
     const newFC = { ...firstCanvas };
@@ -105,6 +144,10 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
       });
     }
 
+    // Extract the Salesforce record ID from the URL
+    const sfIdMatch = activeRegex.exec(submitSfLink);
+    const sfId = sfIdMatch?.[1];
+
     const deal: Deal = {
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       team: submitTeam,
@@ -115,28 +158,51 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
       account: submitAccount,
       notes: submitNotes,
       gong: submitGong,
+      sfLink: submitSfLink,
+      sfId,
       isLegacy: submitLegacy,
       date: new Date().toISOString(),
     };
 
-    // Optimistic update
-    setDeals((prev) => [...prev, deal]);
-    setFirstCanvas(newFC);
+    setIsSubmitting(true);
+    setSubmitError("");
+    try {
+      const res = await fetch("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(deal),
+      });
 
-    await fetch("/api/deals", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(deal),
-    });
+      if (res.status === 409) {
+        setSfLinkError("This Salesforce opportunity has already been logged.");
+        return;
+      }
 
-    setSubmitActions([]);
-    setSubmitARR("");
-    setSubmitAccount("");
-    setSubmitNotes("");
-    setSubmitGong("");
-    setSubmitLegacy(false);
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 2500);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setSubmitError(body.message || `Server error (${res.status}). Check Vercel logs.`);
+        return;
+      }
+
+      // Update local state only after server confirms
+      setDeals((prev) => [...prev, deal]);
+      setFirstCanvas(newFC);
+
+      setSubmitActions([]);
+      setSubmitARR("");
+      setSubmitAccount("");
+      setSubmitNotes("");
+      setSubmitGong("");
+      setSubmitSfLink("");
+      setSfLinkError("");
+      setSubmitLegacy(false);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 2500);
+    } catch {
+      setSubmitError("Network error — check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -175,10 +241,14 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
           </div>
           <button
             onClick={refresh}
-            disabled={syncing}
-            style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${AIR.border}`, background: AIR.surface, color: AIR.textMuted, fontSize: 11, fontFamily: "'Space Mono', monospace", cursor: "pointer", opacity: syncing ? 0.5 : 1 }}
+            disabled={syncing || refreshCooldown > 0}
+            style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${AIR.border}`, background: AIR.surface, color: AIR.textMuted, fontSize: 11, fontFamily: "'Space Mono', monospace", cursor: (syncing || refreshCooldown > 0) ? "not-allowed" : "pointer", opacity: (syncing || refreshCooldown > 0) ? 0.5 : 1, minWidth: 100 }}
           >
-            {syncing ? "↻ Syncing..." : "↻ Refresh"}
+            {syncing
+              ? "↻ Syncing..."
+              : refreshCooldown > 0
+              ? `↻ ${Math.floor(refreshCooldown / 60)}:${String(refreshCooldown % 60).padStart(2, "0")}`
+              : "↻ Refresh"}
           </button>
         </div>
 
@@ -446,9 +516,19 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
             <label style={labelStyle}>Notes (optional)</label>
             <input value={submitNotes} onChange={(e) => setSubmitNotes(e.target.value)} placeholder="Canvas demo notes, context..." style={inputStyle} />
           </div>
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 20 }}>
             <label style={labelStyle}>Gong Recording Link (optional)</label>
             <input value={submitGong} onChange={(e) => setSubmitGong(e.target.value)} placeholder="https://app.gong.io/call?id=..." style={inputStyle} />
+          </div>
+          <div style={{ marginBottom: 24 }}>
+            <label style={labelStyle}>{submitTeam === "AAE" ? "SFDC Account Link *" : "Salesforce Opportunity Link *"}</label>
+            <input
+              value={submitSfLink}
+              onChange={(e) => { setSubmitSfLink(e.target.value); if (sfLinkError) setSfLinkError(""); }}
+              placeholder={submitTeam === "AAE" ? "https://airinc.lightning.force.com/lightning/r/Account/.../view" : "https://airinc.lightning.force.com/lightning/r/Opportunity/.../view"}
+              style={{ ...inputStyle, borderColor: sfLinkError ? AIR.red : undefined }}
+            />
+            {sfLinkError && <div style={{ marginTop: 4, fontSize: 11, color: AIR.red }}>{sfLinkError}</div>}
           </div>
           {!submitLegacy && submitActions.length > 0 && (
             <div style={{ padding: "12px 16px", borderRadius: 8, marginBottom: 16, background: AIR.cyanDim, border: `1px solid ${AIR.cyanBorder}`, fontFamily: "'Space Mono', monospace", fontSize: 14, display: "flex", justifyContent: "space-between" }}>
@@ -468,12 +548,17 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
               Legacy deal — 0 contest points. ARR counts toward March Total only.
             </div>
           )}
+          {submitError && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, marginBottom: 12, background: "rgba(232,72,85,0.08)", border: "1px solid rgba(232,72,85,0.3)", fontSize: 12, color: AIR.red }}>
+              ⚠ {submitError}
+            </div>
+          )}
           <button
             onClick={handleSubmit}
-            disabled={!submitRep || (!submitLegacy && submitActions.length === 0)}
-            style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: (!submitRep || (!submitLegacy && submitActions.length === 0)) ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700, background: (!submitRep || (!submitLegacy && submitActions.length === 0)) ? AIR.surface : submitLegacy ? AIR.orange : AIR.cyan, color: (!submitRep || (!submitLegacy && submitActions.length === 0)) ? AIR.textDim : AIR.bg }}
+            disabled={isSubmitting || !submitRep || !submitSfLink || (!submitLegacy && submitActions.length === 0)}
+            style={{ width: "100%", padding: "14px", borderRadius: 10, border: "none", cursor: (isSubmitting || !submitRep || !submitSfLink || (!submitLegacy && submitActions.length === 0)) ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 700, background: (isSubmitting || !submitRep || !submitSfLink || (!submitLegacy && submitActions.length === 0)) ? AIR.surface : submitLegacy ? AIR.orange : AIR.cyan, color: (isSubmitting || !submitRep || !submitSfLink || (!submitLegacy && submitActions.length === 0)) ? AIR.textDim : AIR.bg, opacity: isSubmitting ? 0.7 : 1 }}
           >
-            {submitted ? "✅ Deal Logged!" : "Submit Deal"}
+            {submitted ? "✅ Deal Logged!" : isSubmitting ? "Submitting..." : "Submit Deal"}
           </button>
         </div>
       )}
@@ -503,11 +588,18 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
                       {new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       {d.notes && ` · ${d.notes}`}
                     </div>
-                    {d.gong && (
-                      <a href={d.gong} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: AIR.pink, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2 }}>
-                        🎙️ Gong Recording ↗
-                      </a>
-                    )}
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {d.gong && (
+                        <a href={d.gong} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: AIR.pink, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                          🎙️ Gong ↗
+                        </a>
+                      )}
+                      {d.sfLink && (
+                        <a href={d.sfLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: AIR.blue, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                          {d.team === "AAE" ? "☁️ SFDC Account ↗" : "☁️ Salesforce ↗"}
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginLeft: 12 }}>
                     <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 16, fontWeight: 700, color: "#fff" }}>{d.points} pts</div>
