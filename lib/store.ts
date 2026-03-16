@@ -15,9 +15,11 @@ function isSupabaseConfigured(): boolean {
 }
 
 // In-memory fallback for local dev without Supabase credentials
-const memStore: { deals: Deal[]; firstCanvas: FirstCanvas } = {
+const memStore: { deals: Deal[]; firstCanvas: FirstCanvas; totalARR: number; totalARRUpdatedAt: string | null } = {
   deals: [],
   firstCanvas: {},
+  totalARR: 0,
+  totalARRUpdatedAt: null,
 };
 
 // ─── Row mapping ─────────────────────────────────────────────────────────────
@@ -109,6 +111,42 @@ export async function markFirstCanvas(rep: string): Promise<void> {
     .from("first_canvas")
     .upsert({ rep, claimed: true }, { onConflict: "rep" });
   if (error) throw new Error(`markFirstCanvas error: ${error.message}`);
+}
+
+// ─── Total ARR snapshot (written by Zapier, read by UI) ──────────────────────
+
+export async function getTotalARR(): Promise<{ value: number; updatedAt: string | null }> {
+  if (!isSupabaseConfigured()) return { value: memStore.totalARR, updatedAt: memStore.totalARRUpdatedAt };
+  const { data } = await getSupabase()
+    .from("settings")
+    .select("key, value")
+    .in("key", ["total_arr", "total_arr_updated_at"]);
+  const rows = data ?? [];
+  const val = rows.find((r) => r.key === "total_arr");
+  const ts = rows.find((r) => r.key === "total_arr_updated_at");
+  return {
+    value: val ? parseInt(val.value, 10) || 0 : 0,
+    updatedAt: ts?.value ?? null,
+  };
+}
+
+export async function setTotalARR(value: number): Promise<void> {
+  const now = new Date().toISOString();
+  if (!isSupabaseConfigured()) {
+    memStore.totalARR = value;
+    memStore.totalARRUpdatedAt = now;
+    return;
+  }
+  const { error } = await getSupabase()
+    .from("settings")
+    .upsert(
+      [
+        { key: "total_arr", value: String(value) },
+        { key: "total_arr_updated_at", value: now },
+      ],
+      { onConflict: "key" }
+    );
+  if (error) throw new Error(`setTotalARR error: ${error.message}`);
 }
 
 // ─── Bulk writes (kept for webhook compatibility) ─────────────────────────────

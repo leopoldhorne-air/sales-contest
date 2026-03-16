@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getDeals, getFirstCanvas, addDeal, deleteDeal, markFirstCanvas, findDealBySfId } from "@/lib/store";
+import { getDeals, getFirstCanvas, getTotalARR, addDeal, deleteDeal, markFirstCanvas, findDealBySfId } from "@/lib/store";
 import type { Deal } from "@/lib/types";
 
 export async function GET() {
-  const [deals, firstCanvas] = await Promise.all([getDeals(), getFirstCanvas()]);
-  return NextResponse.json({ deals, firstCanvas });
+  const [deals, firstCanvas, arrSnapshot] = await Promise.all([getDeals(), getFirstCanvas(), getTotalARR()]);
+  return NextResponse.json({ deals, firstCanvas, totalARR: arrSnapshot.value, totalARRUpdatedAt: arrSnapshot.updatedAt });
 }
 
 export async function POST(request: Request) {

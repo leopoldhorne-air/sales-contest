@@ -5,12 +5,14 @@ import type { Deal, FirstCanvas, Team, Score } from "@/lib/types";
 import {
   SALES_REPS, AAE_REPS, CS_REPS,
   SALES_ACTIONS, CS_ACTIONS, AAE_ACTIONS,
-  ARR_TIERS, AIR, AIR_LOGO_URI,
+  ARR_TIERS, AIR,
 } from "@/lib/config";
 
 interface Props {
   initialDeals: Deal[];
   initialFirstCanvas: FirstCanvas;
+  initialTotalARR: number;
+  initialTotalARRUpdatedAt: string | null;
 }
 
 function formatCurrency(n: number): string {
@@ -43,9 +45,11 @@ const inputStyle: React.CSSProperties = {
   fontFamily: "'DM Sans', sans-serif", fontSize: 14, outline: "none",
 };
 
-export default function SalesContest({ initialDeals, initialFirstCanvas }: Props) {
+export default function SalesContest({ initialDeals, initialFirstCanvas, initialTotalARR, initialTotalARRUpdatedAt }: Props) {
   const [deals, setDeals] = useState<Deal[]>(initialDeals);
   const [firstCanvas, setFirstCanvas] = useState<FirstCanvas>(initialFirstCanvas);
+  const [sfTotalARR, setSfTotalARR] = useState<number>(initialTotalARR);
+  const [arrUpdatedAt, setArrUpdatedAt] = useState<string | null>(initialTotalARRUpdatedAt);
   const [view, setView] = useState<"leaderboard" | "rules" | "submit" | "deals">("leaderboard");
   const [submitTeam, setSubmitTeam] = useState<Team>("Sales");
   const [submitRep, setSubmitRep] = useState("");
@@ -78,6 +82,8 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
       const data = await res.json();
       setDeals(data.deals);
       setFirstCanvas(data.firstCanvas);
+      if (typeof data.totalARR === "number") setSfTotalARR(data.totalARR);
+      if (data.totalARRUpdatedAt) setArrUpdatedAt(data.totalARRUpdatedAt);
       // Start 5-minute cooldown
       setRefreshCooldown(300);
       cooldownRef.current = setInterval(() => {
@@ -104,7 +110,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
     return Object.values(scores).sort((a, b) => b.points - a.points);
   }, [deals]);
 
-  const totalARR = 175000 + deals.reduce((s, d) => s + (d.arr || 0), 0);
+  const totalARR = sfTotalARR;
   const creditsARR = deals.filter((d) => !d.isLegacy).reduce((s, d) => s + (d.arr || 0), 0);
   const currentTier = [...ARR_TIERS].reverse().find((t) => totalARR >= t.threshold);
   const nextTier = ARR_TIERS.find((t) => totalARR < t.threshold);
@@ -231,9 +237,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
       <div style={{ padding: "28px 24px 20px", borderBottom: `1px solid ${AIR.border}`, background: `linear-gradient(180deg, rgba(77,212,230,0.04) 0%, transparent 100%)` }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, overflow: "hidden" }}>
-              <img src={AIR_LOGO_URI} style={{ width: 40, height: 40 }} alt="Air" />
-            </div>
+            <img src="/air-logo.png" style={{ height: 36, width: "auto", filter: "invert(1) brightness(2)" }} alt="Air" />
             <div>
               <h1 style={{ fontFamily: "'Space Mono', monospace", fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", color: "#fff" }}>CREDITS LAUNCH</h1>
               <p style={{ fontSize: 11, color: AIR.textMuted, fontFamily: "'Space Mono', monospace", letterSpacing: "0.08em" }}>SALES & CS CONTEST · MARCH 16–31</p>
@@ -255,7 +259,14 @@ export default function SalesContest({ initialDeals, initialFirstCanvas }: Props
         {/* MARCH TOTAL ARR */}
         <div style={{ marginTop: 20, padding: "16px 20px", borderRadius: 12, background: AIR.surface, border: `1px solid ${AIR.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <span style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: AIR.textMuted, letterSpacing: "0.1em" }}>MARCH TOTAL ARR — THE NUMBER</span>
+            <div>
+              <span style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: AIR.textMuted, letterSpacing: "0.1em" }}>MARCH TOTAL ARR — THE NUMBER</span>
+              {arrUpdatedAt && (
+                <div style={{ fontSize: 10, color: AIR.textMuted, marginTop: 2 }}>
+                  as of {new Date(arrUpdatedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}
+                </div>
+              )}
+            </div>
             <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 20, fontWeight: 700, color: currentTier ? AIR.teal : "#fff" }}>{formatCurrency(totalARR)}</span>
           </div>
           <div style={{ position: "relative", marginBottom: 4 }}>
