@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Credits Launch — Sales Contest",
   description: "Air Sales & CS SPIFF Leaderboard · March 16–31",
+  icons: { icon: "/air-logo.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
