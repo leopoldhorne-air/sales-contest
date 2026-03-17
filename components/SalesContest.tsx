@@ -111,7 +111,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
   }, [deals]);
 
   const totalARR = sfTotalARR;
-  const creditsARR = deals.filter((d) => !d.isLegacy).reduce((s, d) => s + (d.arr || 0), 0);
+  const creditsARR = deals.filter((d) => !d.isLegacy && d.team !== "AAE").reduce((s, d) => s + (d.arr || 0), 0);
   const currentTier = [...ARR_TIERS].reverse().find((t) => totalARR >= t.threshold);
   const nextTier = ARR_TIERS.find((t) => totalARR < t.threshold);
 
@@ -441,7 +441,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: "#fff" }}>{rep.name}</span>
-                    {rep.role === "AAE" && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: AIR.goldDim, color: AIR.gold, fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>AAE</span>}
+                    {(rep.role === "AAE" || rep.role === "BDR") && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: AIR.goldDim, color: AIR.gold, fontFamily: "'Space Mono', monospace", fontWeight: 700 }}>{rep.role}</span>}
                   </div>
                   <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
                     <div style={{ height: "100%", borderRadius: 2, width: `${(rep.points / maxPts) * 100}%`, background: `linear-gradient(90deg, ${tc.primary}, ${tc.primary}cc)`, transition: "width 0.5s ease" }} />
@@ -499,7 +499,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
             </button>
           </div>
           <div style={{ marginBottom: 20 }}>
-            <label style={labelStyle}>Deal ARR ($)</label>
+            <label style={labelStyle}>{submitTeam === "CS" ? "Deal ARR Impact ($)" : "Deal ARR ($)"}</label>
             <input type="number" value={submitARR} onChange={(e) => setSubmitARR(e.target.value)} placeholder="e.g., 25000" style={inputStyle} />
           </div>
           {!submitLegacy && (

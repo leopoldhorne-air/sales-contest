@@ -13,7 +13,7 @@ export const SALES_REPS: Rep[] = [
 
 export const AAE_REPS: Rep[] = [
   { name: "Graham Collector", team: "AAE", role: "AAE" },
-  { name: "Kyle Haslett", team: "AAE", role: "AAE" },
+  { name: "Kyle Haslett", team: "AAE", role: "BDR" },
   { name: "Jacqueline Lo", team: "AAE", role: "AAE" },
   { name: "Julia Veith", team: "AAE", role: "AAE" },
 ];
