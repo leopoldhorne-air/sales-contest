@@ -64,7 +64,6 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [activeBoard, setActiveBoard] = useState<Team>("Sales");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
@@ -213,16 +212,6 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleDelete = async (id: string) => {
-    setDeals((prev) => prev.filter((d) => d.id !== id));
-    setDeletingId(null);
-    await fetch("/api/deals", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
   };
 
   const toggleAction = (actionId: string) => {
@@ -634,14 +623,6 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
                   <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginLeft: 12 }}>
                     <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 16, fontWeight: 700, color: "#fff" }}>{d.points} pts</div>
                     {d.arr > 0 && <div style={{ fontSize: 11, color: AIR.textMuted }}>{formatCurrency(d.arr)} ARR</div>}
-                    {deletingId === d.id ? (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={() => handleDelete(d.id)} style={{ padding: "3px 8px", borderRadius: 4, border: `1px solid rgba(232,72,85,0.4)`, background: "rgba(232,72,85,0.1)", color: AIR.red, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Confirm</button>
-                        <button onClick={() => setDeletingId(null)} style={{ padding: "3px 8px", borderRadius: 4, border: `1px solid ${AIR.border}`, background: "transparent", color: AIR.textDim, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Cancel</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setDeletingId(d.id)} style={{ padding: "2px 6px", borderRadius: 4, border: "none", background: "transparent", color: AIR.textDim, fontSize: 10, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Remove</button>
-                    )}
                   </div>
                 </div>
               </div>
