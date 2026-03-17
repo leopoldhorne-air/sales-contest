@@ -68,6 +68,7 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
   const [syncing, setSyncing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [refreshCooldown, setRefreshCooldown] = useState(0);
+  const [showToast, setShowToast] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -84,6 +85,9 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
       setFirstCanvas(data.firstCanvas);
       if (typeof data.totalARR === "number") setSfTotalARR(data.totalARR);
       if (data.totalARRUpdatedAt) setArrUpdatedAt(data.totalARRUpdatedAt);
+      // Show toast confirmation
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
       // Start 5-minute cooldown
       setRefreshCooldown(300);
       cooldownRef.current = setInterval(() => {
@@ -233,6 +237,21 @@ export default function SalesContest({ initialDeals, initialFirstCanvas, initial
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: AIR.bg, color: AIR.text, minHeight: "100vh" }}>
+      <style>{`
+        @keyframes slideInToast {
+          from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes slideOutToast {
+          from { opacity: 1; transform: translateX(-50%) translateY(0); }
+          to   { opacity: 0; transform: translateX(-50%) translateY(16px); }
+        }
+      `}</style>
+      {showToast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#1a2a2a", border: `1px solid ${AIR.tealBorder}`, color: AIR.teal, padding: "10px 20px", borderRadius: 8, fontSize: 13, fontFamily: "'Space Mono', monospace", animation: "slideInToast 0.3s ease, slideOutToast 0.4s ease 2.6s forwards", zIndex: 9999, whiteSpace: "nowrap", boxShadow: "0 4px 20px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
+          ✓ Data refreshed
+        </div>
+      )}
       {/* HEADER */}
       <div style={{ padding: "28px 24px 20px", borderBottom: `1px solid ${AIR.border}`, background: `linear-gradient(180deg, rgba(77,212,230,0.04) 0%, transparent 100%)` }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
